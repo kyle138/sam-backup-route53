@@ -94,6 +94,11 @@ Resources:
         Function: !Ref FunctionTag
         Project: !Ref ProjectTag
         Billing: !Ref BillingTag
+  Route53BackupFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${Route53BackupFunction}"
+      RetentionInDays: 180
 
 Outputs:
   BackupBucketName:

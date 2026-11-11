@@ -22,12 +22,8 @@ export const handler = async (event) => {
         console.debug(`Found ${hostedZones.length} hosted zone(s) to back up.`); // DEBUG
         console.debug(`hostedZones: `,JSON.stringify(hostedZones,null,2)); // DEBUG
 
-        // Generate YYYYMMDD date format once for this backup run
+        // Generate YYYYMMDD date format backup name
         const now = new Date();
-        // const year = now.getUTCFullYear();
-        // const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-        // const day = String(now.getUTCDate()).padStart(2, '0');
-        // const dateStr = `${year}${month}${day}`;
         const dateStr = now.getUTCFullYear() + String(now.getUTCMonth() + 1).padStart(2, '0') + String(now.getUTCDate()).padStart(2, '0');
         console.debug(`dateStr: ${dateStr}`); // DEBUG
 
@@ -36,6 +32,7 @@ export const handler = async (event) => {
             // Strip out the leading "/hostedzone/" prefix if present in Id
             const hostedZoneId = zone.Id.replace('/hostedzone/', '');
             const zoneName = zone.Name.replace(/\.$/, ''); // remove trailing dot
+            console.debug(`zone: ${hostedZoneId} ${zoneName}`); // DEBUG
 
             let recordSets = [];
             let isTruncated = true;
@@ -61,6 +58,7 @@ export const handler = async (event) => {
                     nextRecordIdentifier = response.NextRecordIdentifier;
                 }
             }
+            console.debug(`recordSets.length: ${recordSets.length}`); // DEBUG
 
             const fileName = `R53/${zoneName}_${hostedZoneId}/${dateStr}.json`;
             const fileContent = JSON.stringify({
@@ -69,6 +67,8 @@ export const handler = async (event) => {
                 BackedUpAt: now.toISOString(),
                 RecordSets: recordSets
             }, null, 2);
+            console.debug(`fileName: ${fileName}`); // DEBUG
+            console.debug(`fileContent: `,JSON.stringify(fileContent,null,2)); // DEBUG
 
             await s3.send(new PutObjectCommand({
                 Bucket: bucketName,
