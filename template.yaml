@@ -3,39 +3,104 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   sam-backup-route53
 
-  Sample SAM Template for sam-backup-route53
-  
-# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
-Globals:
-  Function:
-    Timeout: 3
+  Serverless Route53 Multi-Zone Backup Lambda
+
+Parameters:
+  BucketNamePrefix:
+    Type: String
+    Default: "" # Leave empty by default to fallback to Account ID
+    Description: Optional human-friendly prefix fo rthe S3 backup bucket.
+  BrandTag:
+    Type: String
+    Default: "Route53Backup"
+    Description: Optional Brand tag Value
+  FunctionTag: 
+    Type: String
+    Default: "Management"
+    Description: Optional Function tag value
+  ProjectTag: 
+    Type: String
+    Default: "Route53Backup"
+    Description: Optional Function tag value
+  BillingTag: 
+    Type: String
+    Default: "Infrastructure"
+    Description: Optional Billing tag value
+
+Conditions:
+  # Check if the prefix is empty
+  UseDefaultAccountName: !Equals [ !Ref BucketNamePrefix, "" ]
 
 Resources:
-  HelloWorldFunction:
-    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+  BackupBucket:
+    Type: AWS::S3::Bucket
     Properties:
-      CodeUri: hello-world/
-      Handler: app.lambdaHandler
+      # If prefix is empty, use <AccountId>-backup-route53
+      BucketName: !If
+        - UseDefaultAccountName
+        - !Sub "${AWS::AccountId}-backup-route53"
+        - !Sub "${BucketNamePrefix}-backup-route53"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: BackupRetentionAndArchivalPolicy
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 90
+                StorageClass: DEEP_ARCHIVE
+            ExpirationInDays: 1095 # 3 years 
+      Tags: 
+        - Key: Brand
+          Value: !Ref BrandTag
+        - Key: Function
+          Value: !Ref FunctionTag
+        - Key: Project
+          Value: !Ref ProjectTag
+        - Key: Billing
+          Value: !Ref BillingTag
+  Route53BackupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: cron.handler
       Runtime: nodejs24.x
       Architectures:
         - x86_64
+      Timeout: 120
+      MemorySize: 256
+      Environment:
+        Variables:
+          BACKUP_BUCKET_NAME: !Ref BackupBucket
+      Policies:
+        - arn:aws:iam::aws:policy/AmazonRoute53ReadOnlyAccess
+        - S3WritePolicy:
+            BucketName: !Ref BackupBucket
       Events:
-        HelloWorld:
-          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+        DailyBackupSchedule:
+          Type: Schedule
           Properties:
-            Path: /hello
-            Method: get
+            Schedule: 'cron(38 1 * * ? *)'
+            Description: Daily Route53 multi-zone backup trigger
+      Tags: 
+        Brand: !Ref BrandTag
+        Function: !Ref FunctionTag
+        Project: !Ref ProjectTag
+        Billing: !Ref BillingTag
+  Route53BackupFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${Route53BackupFunction}"
+      RetentionInDays: 180
 
 Outputs:
-  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
-  # Find out more about other implicit resources you can reference within SAM
-  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
-  HelloWorldApi:
-    Description: "API Gateway endpoint URL for Prod stage for Hello World function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/Prod/hello/"
-  HelloWorldFunction:
-    Description: "Hello World Lambda Function ARN"
-    Value: !GetAtt HelloWorldFunction.Arn
-  HelloWorldFunctionIamRole:
-    Description: "Implicit IAM Role created for Hello World function"
-    Value: !GetAtt HelloWorldFunctionRole.Arn
+  BackupBucketName:
+    Description: S3 Bucket storing the Route53 backups
+    Value: !Ref BackupBucket
