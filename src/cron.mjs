@@ -25,14 +25,13 @@ export const handler = async (event) => {
         // Generate YYYYMMDD date format backup name
         const now = new Date();
         const dateStr = now.getUTCFullYear() + String(now.getUTCMonth() + 1).padStart(2, '0') + String(now.getUTCDate()).padStart(2, '0');
-        console.debug(`dateStr: ${dateStr}`); // DEBUG
 
         // Loop through each hosted zone and backup its record sets
         for (const zone of hostedZones) {
             // Strip out the leading "/hostedzone/" prefix if present in Id
             const hostedZoneId = zone.Id.replace('/hostedzone/', '');
             const zoneName = zone.Name.replace(/\.$/, ''); // remove trailing dot
-            console.debug(`zone: ${hostedZoneId} ${zoneName}`); // DEBUG
+            // console.debug(`zone: ${hostedZoneId} ${zoneName}`); // DEBUG
 
             let recordSets = [];
             let isTruncated = true;
@@ -58,7 +57,7 @@ export const handler = async (event) => {
                     nextRecordIdentifier = response.NextRecordIdentifier;
                 }
             }
-            console.debug(`recordSets.length: ${recordSets.length}`); // DEBUG
+            // console.debug(`recordSets.length: ${recordSets.length}`); // DEBUG
 
             const fileName = `R53/${zoneName}_${hostedZoneId}/${dateStr}.json`;
             const fileContent = JSON.stringify({
@@ -67,8 +66,8 @@ export const handler = async (event) => {
                 BackedUpAt: now.toISOString(),
                 RecordSets: recordSets
             }, null, 2);
-            console.debug(`fileName: ${fileName}`); // DEBUG
-            console.debug(`fileContent: `,JSON.stringify(fileContent,null,2)); // DEBUG
+            // console.debug(`fileName: ${fileName}`); // DEBUG
+            // console.debug(`fileContent: `,JSON.stringify(fileContent,null,2)); // DEBUG
 
             await s3.send(new PutObjectCommand({
                 Bucket: bucketName,
@@ -77,10 +76,11 @@ export const handler = async (event) => {
                 ContentType: 'application/json'
             }));
 
-            console.log(`Successfully backed up zone ${zoneName} (${hostedZoneId}) to s3://${bucketName}/${fileName}`);
+            console.log(`Successfully backed up  ${recordSets.length} records for zone ${zoneName} (${hostedZoneId}) to s3://${bucketName}/${fileName}`);
         }
 
-        return { statusCode: 200, body: `Successfully backed up ${hostedZones.length} Route53 zone(s).` };
+        console.log(`Successfully backed up ${hostedZones.length} Route53 zone(s).`);
+        return;
     } catch (error) {
         console.error("Error backing up Route53 zones:", error);
         throw error;
